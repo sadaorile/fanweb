@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Quạt thổi khí công nghiệp | {{ site_name }}{% endblock %}
+{% block content %}
+<section class="hero-section">
+ <div class="container py-5 py-lg-6"><div class="row align-items-center g-5">
+  <div class="col-lg-7"><div class="eyebrow">INDUSTRIAL AIRFLOW SOLUTIONS</div><h1>Quạt thổi khí mạnh mẽ.<br><span>Vận hành ổn định.</span></h1><p class="lead mt-4">Thiết kế và cung cấp quạt ly tâm, quạt hướng trục, quạt thổi khí cho hệ thống thông gió và xử lý khí công nghiệp.</p><div class="d-flex flex-wrap gap-3 mt-4"><a href="{{ url_for('products') }}" class="btn btn-accent btn-lg rounded-pill px-4">Xem sản phẩm</a><a href="{{ url_for('contact') }}" class="btn btn-outline-light btn-lg rounded-pill px-4">Yêu cầu tư vấn</a></div><div class="hero-trust mt-5"><span>✓ Tư vấn theo lưu lượng</span><span>✓ Tùy chọn công suất</span><span>✓ Hỗ trợ kỹ thuật</span></div></div>
+  <div class="col-lg-5"><div class="hero-machine"><div class="fan-ring"><div class="fan-blades">✦</div></div><div class="machine-tag"><strong>FANPRO</strong><span>ENGINEERED AIRFLOW</span></div></div></div>
+ </div></div>
+</section>
+<section class="section-pad"><div class="container"><div class="section-heading"><div><div class="eyebrow dark">GIẢI PHÁP CHO CÔNG NGHIỆP</div><h2>Quạt làm được nhiều hơn việc “thổi gió”</h2></div><p>Chúng tôi tập trung vào đúng nhu cầu lưu lượng, áp suất và môi trường làm việc để lựa chọn cấu hình phù hợp.</p></div>
+ <div class="row g-4 mt-2">
+ {% for title, text, icon in [('Thông gió nhà xưởng','Tạo luồng khí tuần hoàn, giảm nhiệt và cải thiện môi trường làm việc.','↗'),('Hút bụi & khói','Kết nối hệ thống đường ống để hút bụi, khói và khí nóng trong dây chuyền.','◎'),('Cấp khí công nghệ','Cấp khí ổn định cho buồng sấy, lò, máy móc và các công đoạn sản xuất.','≋'),('Tùy chỉnh theo hệ thống','Tư vấn động cơ, tốc độ, kích thước và phương án truyền động theo tải thực tế.','⚙')] %}
+ <div class="col-md-6 col-xl-3"><div class="feature-card h-100"><div class="feature-icon">{{ icon }}</div><h5>{{ title }}</h5><p>{{ text }}</p></div></div>{% endfor %}
+ </div></div></section>
+<section class="section-soft section-pad"><div class="container"><div class="section-heading"><div><div class="eyebrow dark">SẢN PHẨM NỔI BẬT</div><h2>Dòng quạt được quan tâm</h2></div><a href="{{ url_for('products') }}" class="text-link">Xem tất cả →</a></div>
+<div class="row g-4">{% for p in featured %}<div class="col-md-6 col-xl-3"><a class="product-card" href="{{ url_for('product_detail', slug=p.slug) }}"><div class="product-image">{% if p.image_url %}<img src="{{ p.image_url }}" alt="{{ p.name }}">{% else %}<span>FAN</span><b>PRO</b>{% endif %}<span class="product-badge">{{ p.category }}</span></div><div class="p-4"><div class="sku">{{ p.sku }}</div><h5>{{ p.name }}</h5><p>{{ p.short_description }}</p><span class="text-link">Xem chi tiết →</span></div></a></div>{% else %}<div class="col-12"><div class="empty-state">Chưa có sản phẩm nổi bật.</div></div>{% endfor %}</div></div></section>
+<section class="section-pad"><div class="container"><div class="cta-panel"><div><div class="eyebrow">BẠN CHƯA BIẾT CHỌN CẤU HÌNH?</div><h2>Gửi yêu cầu, chúng tôi giúp bạn chọn đúng quạt.</h2><p class="mb-0">Chỉ cần cung cấp lưu lượng, áp suất hoặc thông tin máy đang sử dụng.</p></div><a href="{{ url_for('contact') }}" class="btn btn-light rounded-pill px-4">Gửi thông tin</a></div></div></section>
+<section class="section-soft section-pad"><div class="container"><div class="section-heading"><div><div class="eyebrow dark">ĐỐI TÁC & ỨNG DỤNG</div><h2>Đồng hành cùng nhiều mô hình sản xuất</h2></div></div><div class="partner-grid"><div>NỘI THẤT</div><div>GỖ & MDF</div><div>THỰC PHẨM</div><div>CƠ KHÍ</div><div>NHỰA</div><div>BAO BÌ</div></div></div></section>
+{% endblock %}
