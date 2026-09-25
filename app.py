@@ -48,6 +48,40 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = engine_options
 
 db = SQLAlchemy(app)
 
+_schema_ready = False
+
+def ensure_production_schema():
+    global _schema_ready
+    if _schema_ready:
+        return
+    try:
+        # Idempotent bootstrap for Vercel/Supabase. Safe on every cold start.
+        db.create_all()
+        # Seed the initial admin/products only when the FANWEB tables are empty.
+        if not db.session.execute(db.select(Admin).filter_by(username=app.config['ADMIN_USERNAME'])).scalar_one_or_none():
+            admin = Admin(username=app.config['ADMIN_USERNAME'])
+            admin.set_password(app.config['ADMIN_PASSWORD'])
+            db.session.add(admin)
+        if Product.query.count() == 0:
+            samples = [
+                Product(sku='FP-CB-100', name='Quạt ly tâm cao áp FP-CB 100', slug='quat-ly-tam-cao-ap-fp-cb-100', category='Quạt ly tâm cao áp', short_description='Dòng quạt nhỏ gọn cho tủ điện, máy sấy và hệ thống hút bụi.', description='Thiết kế cánh cong tối ưu lưu lượng và áp suất, phù hợp các hệ thống cần luồng khí ổn định.', airflow='1.200–2.800 m³/h', pressure='800–1.600 Pa', motor='2.2 kW', voltage='380V / 3P', speed='2.900 rpm', featured=True),
+                Product(sku='FP-CB-200', name='Quạt ly tâm công nghiệp FP-CB 200', slug='quat-ly-tam-cong-nghiep-fp-cb-200', category='Quạt ly tâm', short_description='Phù hợp xưởng sản xuất, hút mùi và cấp khí.', description='Kết cấu chắc chắn, dễ bảo trì và có thể tùy chỉnh động cơ theo yêu cầu.', airflow='2.500–5.500 m³/h', pressure='900–1.900 Pa', motor='3.0–4.0 kW', voltage='380V / 3P', speed='2.900 rpm', featured=True),
+                Product(sku='FP-TB-250', name='Quạt hướng trục FP-TB 250', slug='quat-huong-truc-fp-tb-250', category='Quạt hướng trục', short_description='Giải pháp thông gió nhà xưởng và làm mát cục bộ.', description='Thiết kế hướng trục cho lưu lượng lớn, tiếng ồn tối ưu theo cấu hình cánh.', airflow='4.000–8.000 m³/h', pressure='250–650 Pa', motor='1.5–2.2 kW', voltage='380V / 3P', speed='1.450 rpm', featured=False),
+                Product(sku='FP-BL-315', name='Quạt thổi khí công suất lớn FP-BL 315', slug='quat-thoi-khi-cong-suat-lon-fp-bl-315', category='Quạt thổi khí', short_description='Dùng cho cấp khí, đẩy bụi và các hệ thống đường ống công nghiệp.', description='Khung vỏ thép sơn công nghiệp, cân bằng động rotor và tùy chọn truyền động trực tiếp hoặc dây đai.', airflow='6.500–12.000 m³/h', pressure='1.200–2.600 Pa', motor='5.5–7.5 kW', voltage='380V / 3P', speed='1.450 rpm', featured=True),
+            ]
+            db.session.add_all(samples)
+        db.session.commit()
+        _schema_ready = True
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+
+@app.before_request
+def bootstrap_on_vercel():
+    if os.getenv('VERCEL'):
+        ensure_production_schema()
 
 def slugify(text: str) -> str:
     value = (text or '').strip().lower()
@@ -429,9 +463,7 @@ app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', '1' if 
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# Never query or seed the production database during module import on Vercel.
-# The production schema is managed in Supabase SQL, and /health reports DB mismatch
-# without crashing the Function during import.
+# Local development bootstrap only. Vercel bootstraps lazily in before_request.
 if not os.getenv('VERCEL') and app.config['AUTO_CREATE_DB']:
     with app.app_context():
         initialize_data()
