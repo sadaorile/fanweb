@@ -58,6 +58,11 @@ def ensure_production_schema():
     try:
         # Idempotent bootstrap for Vercel/Supabase. Safe on every cold start.
         db.create_all()
+        # Backfill legacy single-image URLs into the gallery table.
+        for product in Product.query.all():
+            if product.image_url and not product.images:
+                db.session.add(ProductImage(product=product, image_url=product.image_url, sort_order=0, is_cover=True))
+
         # Seed the initial admin/products only when the FANWEB tables are empty.
         if not db.session.execute(db.select(Admin).filter_by(username=app.config['ADMIN_USERNAME'])).scalar_one_or_none():
             admin = Admin(username=app.config['ADMIN_USERNAME'])
@@ -128,6 +133,23 @@ class Product(db.Model):
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    images = db.relationship(
+        'ProductImage',
+        back_populates='product',
+        cascade='all, delete-orphan',
+        order_by='ProductImage.sort_order.asc(), ProductImage.id.asc()'
+    )
+
+
+class ProductImage(db.Model):
+    __tablename__ = 'fanweb_product_image'
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('fanweb_product.id', ondelete='CASCADE'), nullable=False, index=True)
+    image_url = db.Column(db.String(700), nullable=False)
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    is_cover = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    product = db.relationship('Product', back_populates='images')
 
 
 class Inquiry(db.Model):
@@ -162,6 +184,14 @@ def admin_required(view):
 
 def allowed_image(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_IMAGE_EXTENSIONS']
+
+
+def save_uploads(file_storages):
+    urls = []
+    for file_storage in (file_storages or []):
+        if file_storage and file_storage.filename:
+            urls.append(save_upload(file_storage))
+    return urls
 
 
 def save_upload(file_storage):
@@ -274,7 +304,8 @@ def health():
             "select current_database() as db, current_schema() as schema, "
             "to_regclass('public.fanweb_admin') as admin_table, "
             "to_regclass('public.fanweb_product') as product_table, "
-            "to_regclass('public.fanweb_inquiry') as inquiry_table"
+            "to_regclass('public.fanweb_inquiry') as inquiry_table, "
+            "to_regclass('public.fanweb_product_image') as image_table"
         )).mappings().one()
         return {
             'status': 'ok',
@@ -283,7 +314,8 @@ def health():
             'fanweb_tables': {
                 'admin': row['admin_table'],
                 'product': row['product_table'],
-                'inquiry': row['inquiry_table']
+                'inquiry': row['inquiry_table'],
+                'images': row['image_table']
             }
         }, 200
     except Exception as exc:
@@ -365,12 +397,19 @@ def admin_product_add():
                 featured=request.form.get('featured') == 'on',
                 active=request.form.get('active') == 'on',
             )
-            upload = request.files.get('image_file')
-            if upload and upload.filename:
-                product.image_url = save_upload(upload)
+            image_files = request.files.getlist('image_files')
             if not product.sku or not product.name:
                 raise ValueError('SKU và tên sản phẩm là bắt buộc.')
             db.session.add(product)
+            db.session.flush()
+            cover_url = request.form.get('image_url', '').strip()
+            urls = save_uploads(image_files)
+            if cover_url:
+                urls.insert(0, cover_url)
+            for index, image_url in enumerate(urls):
+                db.session.add(ProductImage(product_id=product.id, image_url=image_url, sort_order=index, is_cover=(index == 0)))
+            if urls:
+                product.image_url = urls[0]
             db.session.commit()
             flash('Đã thêm sản phẩm.', 'success')
             return redirect(url_for('admin_products'))
@@ -402,11 +441,21 @@ def admin_product_edit(product_id):
             product.image_url = request.form.get('image_url', '').strip() or product.image_url
             product.featured = request.form.get('featured') == 'on'
             product.active = request.form.get('active') == 'on'
-            upload = request.files.get('image_file')
-            if upload and upload.filename:
-                product.image_url = save_upload(upload)
+            image_files = request.files.getlist('image_files')
             if not product.sku or not product.name:
                 raise ValueError('SKU và tên sản phẩm là bắt buộc.')
+            urls = save_uploads(image_files)
+            if urls:
+                start_order = max([img.sort_order for img in product.images], default=-1) + 1
+                for offset, image_url in enumerate(urls):
+                    db.session.add(ProductImage(
+                        product_id=product.id,
+                        image_url=image_url,
+                        sort_order=start_order + offset,
+                        is_cover=False
+                    ))
+                if not product.image_url:
+                    product.image_url = urls[0]
             db.session.commit()
             flash('Đã cập nhật sản phẩm.', 'success')
             return redirect(url_for('admin_products'))
@@ -414,6 +463,38 @@ def admin_product_edit(product_id):
             db.session.rollback()
             flash(f'Không thể cập nhật: {exc}', 'error')
     return render_template('admin/product_form.html', product=product, title='Chỉnh sửa sản phẩm')
+
+
+@app.post('/admin/san-pham/<int:product_id>/anh/<int:image_id>/cover')
+@admin_required
+def admin_product_image_cover(product_id, image_id):
+    product = Product.query.get_or_404(product_id)
+    image = ProductImage.query.filter_by(id=image_id, product_id=product.id).first_or_404()
+    for item in product.images:
+        item.is_cover = (item.id == image.id)
+    product.image_url = image.image_url
+    db.session.commit()
+    flash('Đã chọn ảnh đại diện.', 'success')
+    return redirect(url_for('admin_product_edit', product_id=product.id))
+
+
+@app.post('/admin/san-pham/<int:product_id>/anh/<int:image_id>/xoa')
+@admin_required
+def admin_product_image_delete(product_id, image_id):
+    product = Product.query.get_or_404(product_id)
+    image = ProductImage.query.filter_by(id=image_id, product_id=product.id).first_or_404()
+    was_cover = image.is_cover or product.image_url == image.image_url
+    db.session.delete(image)
+    db.session.flush()
+    remaining = ProductImage.query.filter_by(product_id=product.id).order_by(ProductImage.sort_order.asc(), ProductImage.id.asc()).all()
+    if was_cover:
+        for index, item in enumerate(remaining):
+            item.sort_order = index
+            item.is_cover = (index == 0)
+        product.image_url = remaining[0].image_url if remaining else ''
+    db.session.commit()
+    flash('Đã xóa ảnh sản phẩm.', 'success')
+    return redirect(url_for('admin_product_edit', product_id=product.id))
 
 
 @app.post('/admin/san-pham/<int:product_id>/xoa')
