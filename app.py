@@ -1,6 +1,7 @@
 import os
 import re
 import secrets
+import unicodedata
 import mimetypes
 from datetime import datetime
 from functools import wraps
@@ -85,7 +86,11 @@ def bootstrap_on_vercel():
 
 def slugify(text: str) -> str:
     value = (text or '').strip().lower()
-    value = re.sub(r'[^\w\s-]', '', value, flags=re.UNICODE)
+    # Keep product URLs ASCII-only so browsers, sharing and SEO are predictable.
+    value = unicodedata.normalize('NFKD', value)
+    value = ''.join(ch for ch in value if not unicodedata.combining(ch))
+    value = value.replace('đ', 'd').replace('ð', 'd')
+    value = re.sub(r'[^a-z0-9\s-]', '', value)
     value = re.sub(r'[-\s]+', '-', value).strip('-')
     return value or secrets.token_hex(4)
 
@@ -224,9 +229,21 @@ def products():
     return render_template('products.html', products=items, categories=categories, q=q, category=category)
 
 
-@app.route('/san-pham/<slug>')
+@app.route('/san-pham/<path:slug>')
 def product_detail(slug):
-    product = Product.query.filter_by(slug=slug, active=True).first_or_404()
+    product = Product.query.filter_by(slug=slug, active=True).first()
+    if not product:
+        # Backward compatibility for old Vietnamese/Unicode slugs.
+        target = slugify(slug)
+        for candidate in Product.query.filter_by(active=True).all():
+            if slugify(candidate.slug) == target or slugify(candidate.name) == target:
+                product = candidate
+                canonical = url_for('product_detail', slug=slugify(candidate.name))
+                if request.path != canonical:
+                    return redirect(canonical, code=301)
+                break
+    if not product:
+        return render_template('404.html'), 404
     related = Product.query.filter(Product.active.is_(True), Product.category == product.category, Product.id != product.id).limit(3).all()
     return render_template('product_detail.html', product=product, related=related)
 
