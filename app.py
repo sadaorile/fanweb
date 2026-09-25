@@ -219,11 +219,25 @@ def contact():
 @app.get('/health')
 def health():
     try:
-        db.session.execute(db.text('select 1'))
-        return {'status': 'ok', 'database': 'ok'}, 200
+        row = db.session.execute(db.text(
+            "select current_database() as db, current_schema() as schema, "
+            "to_regclass('public.fanweb_admin') as admin_table, "
+            "to_regclass('public.fanweb_product') as product_table, "
+            "to_regclass('public.fanweb_inquiry') as inquiry_table"
+        )).mappings().one()
+        return {
+            'status': 'ok',
+            'database': row['db'],
+            'schema': row['schema'],
+            'fanweb_tables': {
+                'admin': row['admin_table'],
+                'product': row['product_table'],
+                'inquiry': row['inquiry_table']
+            }
+        }, 200
     except Exception as exc:
         db.session.rollback()
-        return {'status': 'error', 'database': 'unavailable', 'detail': str(exc)[:200]}, 503
+        return {'status': 'error', 'database': 'unavailable', 'detail': str(exc)[:300]}, 503
 
 
 @app.route('/admin/dang-nhap', methods=['GET', 'POST'])
@@ -234,6 +248,11 @@ def admin_login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         admin = Admin.query.filter_by(username=username).first()
+        if not admin and username == app.config['ADMIN_USERNAME'] and secrets.compare_digest(password, app.config['ADMIN_PASSWORD']):
+            admin = Admin(username=username)
+            admin.set_password(password)
+            db.session.add(admin)
+            db.session.commit()
         if admin and admin.check_password(password):
             session.clear()
             session['admin_id'] = admin.id
@@ -410,16 +429,13 @@ app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', '1' if 
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-with app.app_context():
-    try:
+# Never query or seed the production database during module import on Vercel.
+# The production schema is managed in Supabase SQL, and /health reports DB mismatch
+# without crashing the Function during import.
+if not os.getenv('VERCEL') and app.config['AUTO_CREATE_DB']:
+    with app.app_context():
         initialize_data()
         db.session.commit()
-    except Exception:
-        db.session.rollback()
-        # The production schema is managed in Supabase SQL. During a first deploy
-        # the app may boot before that SQL has been run; keep local development easy.
-        if os.getenv('VERCEL') or not app.config['AUTO_CREATE_DB']:
-            raise
 
 
 if __name__ == '__main__':
