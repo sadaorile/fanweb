@@ -56,6 +56,7 @@ def slugify(text: str) -> str:
 
 
 class Admin(db.Model):
+    __tablename__ = 'fanweb_admin'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
@@ -69,6 +70,7 @@ class Admin(db.Model):
 
 
 class Product(db.Model):
+    __tablename__ = 'fanweb_product'
     id = db.Column(db.Integer, primary_key=True)
     sku = db.Column(db.String(80), unique=True, nullable=False)
     name = db.Column(db.String(200), nullable=False)
@@ -89,6 +91,7 @@ class Product(db.Model):
 
 
 class Inquiry(db.Model):
+    __tablename__ = 'fanweb_inquiry'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     phone = db.Column(db.String(50), nullable=False)
