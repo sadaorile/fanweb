@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -243,7 +243,7 @@ def product_detail(slug):
                     return redirect(canonical, code=301)
                 break
     if not product:
-        return render_template('404.html'), 404
+        abort(404)
     related = Product.query.filter(Product.active.is_(True), Product.category == product.category, Product.id != product.id).limit(3).all()
     return render_template('product_detail.html', product=product, related=related)
 
