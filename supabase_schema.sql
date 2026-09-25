@@ -57,10 +57,22 @@ on conflict (id) do update set public = true;
 
 -- Public read access for product images. Upload/update/delete are performed
 -- server-side with the service-role key.
-create policy if not exists "product-images-public-read"
-on storage.objects for select
-to public
-using (bucket_id = 'product-images');
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and policyname = 'product-images-public-read'
+  ) then
+    create policy "product-images-public-read"
+    on storage.objects for select
+    to public
+    using (bucket_id = 'product-images');
+  end if;
+end
+$$;
 
 -- Keep Data API disabled for these tables by default; this Flask app connects
 -- to Postgres with the server-side DATABASE_URL.
