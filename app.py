@@ -22,7 +22,7 @@ if not os.getenv('VERCEL'):
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'change-this-secret-key')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024
 app.config['UPLOAD_FOLDER'] = str(UPLOAD_DIR)
 app.config['ALLOWED_IMAGE_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'webp'}
 app.config['SUPABASE_URL'] = os.getenv('SUPABASE_URL', '').rstrip('/')
