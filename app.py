@@ -15,7 +15,8 @@ import requests
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / 'static' / 'uploads'
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+if not os.getenv('VERCEL'):
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'change-this-secret-key')
@@ -213,6 +214,16 @@ def contact():
         flash('Đã gửi yêu cầu. Bộ phận tư vấn sẽ liên hệ với bạn sớm.', 'success')
         return redirect(url_for('contact'))
     return render_template('contact.html', prefill_product=prefill_product)
+
+
+@app.get('/health')
+def health():
+    try:
+        db.session.execute(db.text('select 1'))
+        return {'status': 'ok', 'database': 'ok'}, 200
+    except Exception as exc:
+        db.session.rollback()
+        return {'status': 'error', 'database': 'unavailable', 'detail': str(exc)[:200]}, 503
 
 
 @app.route('/admin/dang-nhap', methods=['GET', 'POST'])
